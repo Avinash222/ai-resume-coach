@@ -1,114 +1,178 @@
-import Image from "next/image";
-import { Geist, Geist_Mono } from "next/font/google";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+import { useState, useEffect } from "react";
+import { supabase } from "../lib/supabase";
+import Auth from "../components/Auth";
+import ResumeUpload from "../components/ResumeUpload";
+import ReactMarkdown from "react-markdown";
 
 export default function Home() {
-  return (
-    <div
-      className={`${geistSans.variable} ${geistMono.variable} grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]`}
-    >
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              pages/index.js
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [user, setUser] = useState(null);
+  const [resumeText, setResumeText] = useState("");
+  const [jobDescription, setJobDescription] = useState("");
+  const [feedback, setFeedback] = useState("");
+  const [selectedPastFeedback, setSelectedPastFeedback] = useState("");
+  const [pastFeedback, setPastFeedback] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+  useEffect(() => {
+    const session = supabase.auth.getSession();
+    setUser(session?.user || null);
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (user) {
+      fetchUserFeedback();
+    }
+  }, [user]);
+
+  async function fetchUserFeedback() {
+    if (!user) return;
+  
+    const { data: { session } } = await supabase.auth.getSession();
+    const accessToken = session?.access_token;
+  
+    const { data, error } = await supabase
+      .from("feedback")
+      .select("id, created_at, ai_feedback")
+      .eq("user_id", user.id) // ✅ Manually filter so users only get their own feedback
+      .order("created_at", { ascending: false });
+  
+    if (error) {
+      console.error("Error fetching feedback:", error);
+    } else {
+      setPastFeedback(data);
+    }
+  }  
+
+  async function getAIAnalysis() {
+    if (!resumeText || !jobDescription) {
+      alert("Please upload a resume and enter a job description.");
+      return;
+    }
+
+    setLoading(true);
+    setSelectedPastFeedback("");
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const accessToken = session?.access_token;
+
+    try {
+      const res = await fetch("/api/analyze", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ resumeText, jobDescription }),
+      });
+
+      const data = await res.json();
+      setFeedback(data.feedback);
+      fetchUserFeedback();
+    } catch (error) {
+      alert("Error fetching AI feedback. Please try again.");
+    }
+
+    setLoading(false);
+  }
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    setUser(null);
+  }
+
+  return (
+    <div className="flex flex-col min-h-screen bg-gray-50 p-6 w-full">
+      {!user ? (
+        <Auth />
+      ) : (
+        <div className="w-full max-w-3xl mx-auto">
+          {/* Header with Logout Button */}
+          <div className="flex justify-between items-center mb-6">
+            <p className="text-lg font-semibold">Welcome, {user.email}!</p>
+            <button
+              onClick={handleLogout}
+              className="bg-red-500 hover:bg-red-600 text-white font-semibold px-4 py-2 rounded-md transition"
+            >
+              Logout
+            </button>
+          </div>
+
+          <div className="bg-white p-6 rounded-lg shadow-md">
+            <ResumeUpload user={user} onExtractedText={setResumeText} />
+
+            <textarea
+              className="w-full p-3 border rounded-md mt-4 focus:ring focus:ring-blue-300"
+              placeholder="Paste job description here..."
+              rows="5"
+              value={jobDescription}
+              onChange={(e) => setJobDescription(e.target.value)}
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+
+            <button
+              className={`w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-md mt-4 transition ${
+                loading ? "opacity-50 cursor-not-allowed" : ""
+              }`}
+              onClick={getAIAnalysis}
+              disabled={loading}
+            >
+              {loading ? (
+                <div className="flex items-center justify-center">
+                  <svg className="animate-spin h-5 w-5 mr-3 text-white" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                  </svg>
+                  Analyzing...
+                </div>
+              ) : (
+                "Get AI Feedback"
+              )}
+            </button>
+          </div>
+
+          {/* Live AI Feedback Section */}
+          {feedback && !selectedPastFeedback && (
+            <div className="mt-6 p-6 bg-white border rounded-lg shadow-md">
+              <h3 className="text-xl font-semibold mb-2">AI Feedback (New Analysis):</h3>
+              <ReactMarkdown>{feedback}</ReactMarkdown>
+            </div>
+          )}
+
+          {/* Past Feedback Section */}
+          {pastFeedback.length > 0 && (
+            <div className="mt-6">
+              <h2 className="text-2xl font-semibold mb-3 text-center">Your Past AI Feedback</h2>
+              {pastFeedback.map((entry) => (
+                <div key={entry.id} className="bg-white shadow-md rounded-lg p-4 mb-4">
+                  <button
+                    className="w-full text-left font-semibold text-blue-600 hover:underline"
+                    onClick={() => {
+                      setSelectedPastFeedback((prevFeedback) =>
+                        prevFeedback === entry.ai_feedback ? "" : entry.ai_feedback
+                      );
+                      setFeedback("");
+                    }}
+                  >
+                    📄 Feedback from {new Date(entry.created_at).toLocaleDateString()}
+                  </button>
+                  {selectedPastFeedback === entry.ai_feedback && (
+                    <div className="mt-2 p-3 bg-gray-100 border rounded-md">
+                      <ReactMarkdown>{entry.ai_feedback}</ReactMarkdown>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      )}
     </div>
   );
 }
