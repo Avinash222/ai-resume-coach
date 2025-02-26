@@ -8,21 +8,22 @@ export default function ResumeUpload({ user, onExtractedText }) {
 
   async function handleUpload() {
     if (!file) return alert("Please select a file first!");
+    if (!user) return alert("You must be logged in to upload a resume.");
 
     setUploading(true);
 
     try {
       // Convert file to Base64 for API processing
       const reader = new FileReader();
-      reader.readAsArrayBuffer(file);
+      reader.readAsDataURL(file);
       reader.onloadend = async function () {
-        const base64File = Buffer.from(reader.result).toString("base64");
+        const base64String = reader.result.split(",")[1]; // Remove metadata
 
         // Send file to API for text extraction
         const response = await fetch("/api/extractText", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fileBuffer: base64File }),
+          body: JSON.stringify({ file: base64String, userId: user.id }),
         });
 
         if (!response.ok) {
@@ -41,20 +42,19 @@ export default function ResumeUpload({ user, onExtractedText }) {
       const fileExt = file.name.split(".").pop();
       const filePath = `${user.id}/resume.${fileExt}`;
 
-      const { error } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from("resumes")
         .upload(filePath, file, { upsert: true });
 
-      if (error) {
-        throw new Error(error.message);
+      if (uploadError) {
+        throw new Error(uploadError.message);
       }
 
       // Generate public URL for uploaded file
-      const { data: publicUrlData } = supabase.storage
-        .from("resumes")
-        .getPublicUrl(filePath);
-
-      setResumeUrl(publicUrlData.publicUrl);
+      const { data } = supabase.storage.from("resumes").getPublicUrl(filePath);
+      if (data.publicUrl) {
+        setResumeUrl(data.publicUrl);
+      }
     } catch (error) {
       console.error("Error:", error);
       alert(error.message);

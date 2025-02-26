@@ -6,17 +6,21 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { fileBuffer } = req.body;
-    if (!fileBuffer) {
+    // Check if file is attached
+    if (!req.body || !req.body.file) {
       return res.status(400).json({ error: "No file provided" });
     }
 
-    const text = await pdfParse(Buffer.from(fileBuffer, "base64"));
+    // Convert Base64 string back to a Buffer
+    const fileBuffer = Buffer.from(req.body.file, "base64");
 
-    console.log("Extracted Resume Text:", text.text); // Debugging log
-    return res.status(200).json({ text: text.text });
+    // Parse the PDF
+    const parsedData = await pdfParse(fileBuffer);
+
+    // Return the extracted text (only serializable data)
+    res.status(200).json({ text: parsedData.text });
   } catch (error) {
-    console.error("Error extracting text:", error);
-    return res.status(500).json({ error: "Error extracting text" });
+    console.error("PDF Parsing Error:", error);
+    res.status(500).json({ error: "Failed to parse PDF" });
   }
 }
