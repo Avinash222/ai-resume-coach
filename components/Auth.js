@@ -4,23 +4,23 @@ export default function Auth() {
   async function signInWithGoogle() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`, // ✅ Redirects correctly
+      },
     });
-    if (error) console.error("Google Sign-In Error:", error);
+
+    if (error) {
+      console.error("Google Sign-In Error:", error);
+    }
   }
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-6">
-      {/* Hero Section */}
-      <div className="text-center max-w-2xl mb-8">
-        <h1 className="text-4xl font-bold text-gray-800 mb-4">🚀 AI Resume Coach</h1>
-        <p className="text-lg text-gray-600">
-          Get **AI-powered resume feedback** to improve your chances of landing your dream job.  
-          Simply upload your resume, paste a job description, and receive **instant AI suggestions**  
-          to optimize your resume for **ATS systems and hiring managers**.
-        </p>
-      </div>
+      <h1 className="text-3xl font-bold mb-4">🚀 AI Resume Coach</h1>
+      <p className="text-lg text-gray-600 text-center mb-6">
+        Upload your resume and get AI-powered feedback to optimize it!
+      </p>
 
-      {/* Google Sign-In Button with Working SVG */}
       <button
         onClick={signInWithGoogle}
         className="flex items-center bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-md shadow-md transition"
